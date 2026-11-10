@@ -31,3 +31,11 @@ Web: http://localhost:5173. API: http://localhost:3001. The launcher disables ch
 ## Real Sandbox proof segment
 
 Open SANDBOX-DOLLAR-TEST.md after the scripted journey: show the three public provider IDs, completed refund/reconciled ledger, signed delivery/replay and disabled execution. Do not click Pay or authorize another refund during the presentation. The recorded real transaction is already fully refunded. This proof is separate from the synthetic mock-AI demo; a complete real-Gemini-to-refund journey has not passed.
+
+## Customer and merchant sign-in
+
+Open http://localhost:5173/login. Customer and Merchant cards select the workspace experience; both submit only email/password to the existing authentication endpoint. Customer opens My Orders. Merchant requires an active membership returned by the server and opens that actual tenant case inbox; multiple memberships require an explicit workspace choice. Choosing Merchant grants no role or access.
+
+Use existing seeded customer/merchant accounts and the password already configured through local DEV_SEED_PASSWORD. Never reseed just to test this UI. Sign out or use separate browser profiles when switching identities. Existing complaint/detail URLs retain their authorized deep-link destination. The checkout route retains its existing inline customer sign-in and payment flow. Database/session/CSRF/role enforcement and PayPal integrations are unchanged.
+
+UI verification: four routing/schema unit tests and seven mocked-auth browser tests, covering role selection, actual tenant routing, no membership, multiple memberships,401/429 and keyboard/mobile behavior. Existing four mocked checkout tests and two shell tests also passed. The first browser run exposed an accessible-label mismatch; final login rerun passed after correction. A NodeNext test import was corrected before final lint/typecheck. No account or database mutation was used for these checks.

@@ -1,3 +1,4 @@
+import { Login } from './login';
 import { MerchantCasesGrid, type MerchantCaseRow } from './merchant-grid';
 import { AnalyticsDashboard } from './analytics';
 import { NegotiationPanel } from './negotiation';
@@ -156,59 +157,8 @@ const timelineLabel = (action: string, mode?: string) =>
 const categories = complaintReasonSchema.options;
 const inputClass =
   'w-full rounded-md border border-slate-300 bg-white p-2 text-slate-950';
-function Login({ onLogin }: { onLogin: (s: Session) => void }) {
-  const [email, setEmail] = useState(''),
-    [password, setPassword] = useState(''),
-    [error, setError] = useState(''),
-    [busy, setBusy] = useState(false);
-  return (
-    <Card>
-      <h1 className="text-2xl font-semibold">Sign in to ResolveAI</h1>
-      <p className="my-3 text-slate-600">
-        Use your customer or merchant account. Internal complaints are separate
-        from PayPal disputes.
-      </p>
-      <form
-        className="grid max-w-md gap-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setBusy(true);
-          void request<Session>('/auth/login', undefined, {
-            method: 'POST',
-            body: { email, password },
-          })
-            .then(onLogin)
-            .catch((e) => setError(String(e.message)))
-            .finally(() => setBusy(false));
-        }}
-      >
-        <label>
-          Email
-          <input
-            className={inputClass}
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </label>
-        <label>
-          Password
-          <input
-            className={inputClass}
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </label>
-        <Button disabled={busy}>Sign in</Button>
-        <p role="alert">{error}</p>
-      </form>
-    </Card>
-  );
-}
 export function ComplaintsApp() {
+  const location = useLocation();
   const [session, setSession] = useState<Session | null | undefined>(),
     [refresh, setRefresh] = useState(0);
   useEffect(() => {
@@ -218,7 +168,8 @@ export function ComplaintsApp() {
   }, []);
   if (session === undefined)
     return <p role="status">Loading your workspace…</p>;
-  if (!session) return <Login onLogin={setSession} />;
+  if (!session || location.pathname === '/login')
+    return <Login onLogin={setSession} />;
   return (
     <>
       <div className="mb-5 flex flex-wrap items-center gap-4 rounded-lg bg-slate-100 p-4">

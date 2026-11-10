@@ -65,6 +65,7 @@ function App() {
           ResolveAI
         </Link>
         <nav aria-label="Main" className="flex flex-wrap gap-5">
+          <Link to="/login">Sign in</Link>
           <Link to="/orders">Orders</Link>
           <Link to="/complaints">Complaints</Link>
           <Link to="/checkout">Sandbox checkout</Link>
@@ -74,6 +75,7 @@ function App() {
       <main className="mx-auto max-w-5xl p-6">
         <Routes>
           {[
+            '/login',
             '/orders',
             '/complaints',
             '/complaints/new',
