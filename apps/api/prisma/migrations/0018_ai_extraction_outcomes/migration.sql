@@ -1,0 +1,7 @@
+-- Preserve an immutable failed extraction outcome without blocking a later successful retry.
+DO $$DECLARE n text;BEGIN
+ SELECT conname INTO n FROM pg_constraint WHERE conrelid='"EvidenceExtraction"'::regclass AND contype='u' AND cardinality(conkey)=4;
+ IF n IS NOT NULL THEN EXECUTE format('ALTER TABLE public."EvidenceExtraction" DROP CONSTRAINT %I',n);END IF;END$$;
+ALTER TABLE "EvidenceExtraction" ADD CONSTRAINT extraction_outcome_identity UNIQUE("merchantId","evidenceId","sourceHash","extractorVersion",status);
+ALTER POLICY api_insert ON "AIConsent" WITH CHECK("merchantId"=NULLIF(current_setting('app.merchant_id',true),'')::uuid AND "actorId"=NULLIF(current_setting('app.user_id',true),'')::uuid AND EXISTS(SELECT 1 FROM "Case" c WHERE c.id="AIConsent"."caseId" AND c."openedBy"=NULLIF(current_setting('app.user_id',true),'')::uuid));
+ALTER POLICY api_insert ON "AIReview" WITH CHECK("merchantId"=NULLIF(current_setting('app.merchant_id',true),'')::uuid AND "actorId"=NULLIF(current_setting('app.user_id',true),'')::uuid AND case_member("merchantId") AND (action='REJECT' OR EXISTS(SELECT 1 FROM "Membership" m WHERE m."merchantId"="AIReview"."merchantId" AND m."userId"="AIReview"."actorId" AND m.active AND m.role IN('OWNER','APPROVER'))));

@@ -1,0 +1,7 @@
+-- Preparation can persist derivatives and leases, never redefine authoritative source inputs.
+REVOKE UPDATE ON "AIContext" FROM resolve_evidence,resolve_evidence_test;
+GRANT UPDATE(state,"leaseOwner","leaseUntil",attempts,"nextAttemptAt","requestEncrypted","catalogEncrypted","consentHash","errorCode") ON "AIContext" TO resolve_evidence,resolve_evidence_test;
+CREATE OR REPLACE FUNCTION guard_ai_context() RETURNS trigger LANGUAGE plpgsql AS $$DECLARE purge boolean:=NEW.state='EXPIRED' AND OLD."expiresAt"<now() AND NEW."baseEncrypted"='' AND NEW."requestEncrypted" IS NULL AND NEW."catalogEncrypted" IS NULL;BEGIN
+ IF (NEW.manifest,NEW."sharingPolicyId",NEW."selectedEvidenceIds",NEW."caseId",NEW."merchantId",NEW."requestedBy") IS DISTINCT FROM (OLD.manifest,OLD."sharingPolicyId",OLD."selectedEvidenceIds",OLD."caseId",OLD."merchantId",OLD."requestedBy") THEN RAISE EXCEPTION 'AI source input immutable';END IF;
+ IF NEW."baseEncrypted" IS DISTINCT FROM OLD."baseEncrypted" AND NOT purge THEN RAISE EXCEPTION 'AI authoritative input immutable';END IF;
+ IF OLD.state='READY' AND NOT purge AND (NEW."requestEncrypted",NEW."catalogEncrypted",NEW."consentHash") IS DISTINCT FROM (OLD."requestEncrypted",OLD."catalogEncrypted",OLD."consentHash") THEN RAISE EXCEPTION 'Ready AI context immutable';END IF;RETURN NEW;END$$;

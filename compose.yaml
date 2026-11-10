@@ -1,0 +1,79 @@
+services:
+  postgres:
+    image: docker.io/library/postgres@sha256:747d5ed1fdeeb124b880fbe3d7c6557d2c4064ae41d6b6297d417882effce4be
+    environment:
+      POSTGRES_USER: resolve_admin
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Run pnpm local:init}
+      POSTGRES_DB: resolveai
+    ports: ['127.0.0.1:5432:5432']
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./.local/bootstrap.sql:/docker-entrypoint-initdb.d/001-bootstrap.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U resolve_admin -d resolveai']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: docker.io/library/redis@sha256:4912adf5f3be2530b117c7d7729330e457da2f5cfb1d99d38743141735ca1e9d
+    command:
+      [
+        'redis-server',
+        '--appendonly',
+        'yes',
+        '--requirepass',
+        '${REDIS_PASSWORD:?Run pnpm local:init}',
+      ]
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    ports: ['127.0.0.1:6379:6379']
+    volumes: ['redis_data:/data']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  storage:
+    image: docker.io/chrislusf/seaweedfs@sha256:35a086af438a77f975dd7735814ae502cb20f74068ca5358ebf175a5085a6d48
+    command:
+      [
+        'server',
+        '-dir=/data',
+        '-ip=storage',
+        '-ip.bind=0.0.0.0',
+        '-master.volumeSizeLimitMB=100',
+        '-s3',
+        '-s3.port=8333',
+        '-s3.config=/etc/seaweedfs/s3.json',
+      ]
+    ports: ['127.0.0.1:9000:8333']
+    volumes:
+      - storage_data:/data
+      - ./.local/s3.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget -q -O /dev/null http://localhost:9333/cluster/status && wget -S -O /dev/null http://localhost:8333/ 2>&1 | grep -q 403',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  clamav:
+    image: docker.io/clamav/clamav@sha256:2a9be29239aea6c6fe17da9625f3c192f91974e61059d364e293f20277f931a3
+    profiles: ['scanner']
+    ports: ['127.0.0.1:3310:3310']
+    volumes: ['clamav_data:/var/lib/clamav']
+    environment:
+      CLAMD_STARTUP_TIMEOUT: '1800'
+    healthcheck:
+      test: ['CMD', 'clamdcheck.sh']
+      interval: 10s
+      timeout: 5s
+      retries: 180
+
+volumes:
+  clamav_data:
+  postgres_data:
+  redis_data:
+  storage_data:

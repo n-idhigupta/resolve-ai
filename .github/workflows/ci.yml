@@ -1,0 +1,30 @@
+name: Foundation checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  foundation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.13.1'
+      - run: npm install --global pnpm@12.3.4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm local:init
+      - run: pnpm infra:up
+      - run: pnpm db:provision-payments
+      - run: pnpm db:provision-ai
+      - run: pnpm db:provision-evidence
+      - run: pnpm db:migrate
+      - run: pnpm db:migrate:test
+      - run: pnpm db:seed
+      - run: pnpm ai:configure
+      - run: pnpm evidence:configure
+      - run: pnpm scanner:up
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm check
+      - if: always()
+        run: pnpm infra:down

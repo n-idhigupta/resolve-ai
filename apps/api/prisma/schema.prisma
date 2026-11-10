@@ -1,0 +1,805 @@
+generator client {
+ provider = "prisma-client"
+ output = "../src/generated/prisma"
+}
+datasource db {
+ provider = "postgresql"
+}
+enum Role {
+ OWNER
+ APPROVER
+ AGENT
+}
+enum UserStatus {
+ ACTIVE
+ DISABLED
+}
+enum MerchantStatus {
+ ACTIVE
+ SUSPENDED
+}
+enum OrderStatus {
+ UNPAID
+ PENDING
+ PAID
+ CANCELLED
+}
+enum OperationKind {
+ CREATE
+ CAPTURE
+}
+enum OperationState {
+ READY
+ IN_FLIGHT
+ PENDING
+ UNKNOWN
+ COMPLETED
+ FAILED
+}
+enum CaseStatus {
+ AWAITING_CUSTOMER
+ OPEN
+ INVESTIGATING
+ NEGOTIATING
+ RESOLUTION_PENDING
+ RESOLVED
+ ESCALATED
+ CLOSED_WITHOUT_AGREEMENT
+}
+enum ComplaintReason {
+ INCORRECT_AMOUNT
+ ITEM_NOT_RECEIVED
+ NOT_AS_DESCRIBED
+ DAMAGED
+ DUPLICATE_CHARGE
+ OTHER
+}
+enum EvidenceState {
+ QUARANTINED
+ CLEAN
+ REJECTED
+ FAILED
+}
+enum ExtractionState {
+ PENDING
+ SUCCEEDED
+ FAILED
+}
+enum AnalysisState {
+ QUEUED
+ RUNNING
+ SUCCEEDED
+ NEEDS_REVIEW
+ FAILED
+ STALE
+}
+enum ProposalKind {
+ FULL_REFUND
+ PARTIAL_REFUND
+ REPLACEMENT
+ REQUEST_EVIDENCE
+ ESCALATION
+}
+enum ProposalState {
+ WITHDRAWN
+ DRAFT
+ OFFERED
+ AGREED
+ EXECUTING
+ FULFILLED
+ REJECTED
+ EXPIRED
+ SUPERSEDED
+}
+enum ActorRole {
+ CUSTOMER
+ MERCHANT
+}
+enum Decision {
+ ACCEPT
+ REJECT
+}
+enum VerificationState {
+ UNVERIFIED
+ VERIFIED
+ REJECTED
+}
+enum ProcessingState {
+ PENDING
+ PROCESSED
+ FAILED
+}
+enum ReconciliationState {
+ CURRENT
+ FROZEN
+}
+model Merchant {
+ activePolicyVersionId String? @db.Uuid
+ id String @id @default(uuid()) @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ name String
+ status MerchantStatus @default(ACTIVE)
+ defaultCurrency String @default("USD")
+}
+model User {
+ id String @id @default(uuid()) @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ normalizedEmail String
+ passwordHash String
+ status UserStatus @default(ACTIVE)
+ @@unique([normalizedEmail])
+}
+model Session {
+ id String @id @default(uuid()) @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ userId String @db.Uuid
+ tokenHash String
+ authenticatedAt DateTime @db.Timestamptz(3)
+ expiresAt DateTime @db.Timestamptz(3)
+ lastSeenAt DateTime @db.Timestamptz(3)
+ revokedAt DateTime? @db.Timestamptz(3)
+ @@unique([tokenHash])
+}
+model Membership {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ userId String @db.Uuid
+ role Role
+ active Boolean @default(true)
+ @@unique([merchantId,id])
+ @@unique([merchantId,userId])
+}
+model PaymentAccount {
+ refundMode String @default("disabled")
+ enabled Boolean @default(false)
+ workerRoleName String?
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ environment String
+ providerMerchantId String
+ credentialSecretRef String
+ webhookId String?
+ accountKey String
+ @@unique([merchantId,id])
+ @@unique([environment,providerMerchantId])
+ @@unique([accountKey])
+}
+model PolicyVersion {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ sequence Int
+ contentHash String
+ effectiveFrom DateTime @db.Timestamptz(3)
+ publishedAt DateTime? @db.Timestamptz(3)
+ @@unique([merchantId,id])
+ @@unique([merchantId,sequence])
+}
+model PolicyClause {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ policyVersionId String @db.Uuid
+ clauseKey String
+ text String
+ rulesJson Json
+ @@unique([merchantId,id])
+ @@unique([merchantId,policyVersionId,clauseKey])
+}
+model Order {
+ paymentState String @default("NOT_STARTED")
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ customerUserId String @db.Uuid
+ purchasePolicyVersionId String @db.Uuid
+ merchantReference String
+ amountMinor BigInt
+ currency String
+ status OrderStatus @default(UNPAID)
+ version Int @default(0)
+ updatedAt DateTime @default(now()) @db.Timestamptz(3)
+ @@unique([merchantId,id])
+ @@unique([merchantId,merchantReference])
+}
+model CustomerOrder {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ orderId String @db.Uuid
+ userId String @db.Uuid
+ @@unique([merchantId,id])
+ @@unique([merchantId,orderId,userId])
+}
+model OrderItem {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ orderId String @db.Uuid
+ description String
+ quantity Int
+ unitMinor BigInt
+ taxMinor BigInt @default(0)
+ shippingMinor BigInt @default(0)
+ currency String
+ @@unique([merchantId,id])
+}
+model CheckoutOperation {
+ requestedBy String? @db.Uuid
+ requestPayload Json?
+ providerStatus String?
+ providerCaptureId String?
+ approvalUrl String?
+ firstAttemptAt DateTime? @db.Timestamptz(3)
+ retryUntil DateTime? @db.Timestamptz(3)
+ postAttempts Int @default(0)
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ orderId String @db.Uuid
+ accountId String @db.Uuid
+ kind OperationKind
+ requestId String @db.Uuid
+ requestHash String
+ providerOrderId String?
+ state OperationState @default(READY)
+ attemptCount Int @default(0)
+ leaseOwner String?
+ leaseUntil DateTime? @db.Timestamptz(3)
+ nextAttemptAt DateTime? @db.Timestamptz(3)
+ completedAt DateTime? @db.Timestamptz(3)
+ lastErrorCode String?
+ version Int @default(0)
+ @@unique([merchantId,id])
+ @@unique([accountId,requestId])
+}
+model Capture {
+ verifiedAt DateTime? @db.Timestamptz(3)
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ orderId String @db.Uuid
+ accountId String @db.Uuid
+ providerCaptureId String
+ providerOrderId String
+ grossMinor BigInt
+ currency String
+ providerStatus String
+ completedAt DateTime @db.Timestamptz(3)
+ reservedMinor BigInt @default(0)
+ refundedMinor BigInt @default(0)
+ externalRefundedMinor BigInt @default(0)
+ reconciliationStatus ReconciliationState @default(CURRENT)
+ discrepancyJson Json?
+ version Int @default(0)
+ @@unique([merchantId,id])
+ @@unique([accountId,providerCaptureId])
+ @@unique([merchantId,orderId])
+ @@unique([merchantId,id,orderId])
+ @@unique([merchantId,id,accountId])
+}
+model Case {
+ aiSyntheticAuthorizedVersion Int?
+ aiSyntheticAuthorized Boolean @default(false)
+ title String @default("Legacy case")
+ requestedOutcome String @default("HELP")
+ desiredResolution String @default("")
+ policySnapshot Json @default("{}")
+ closedAt DateTime? @db.Timestamptz(3)
+ closureReason String?
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ orderId String @db.Uuid
+ openedBy String @db.Uuid
+ policyVersionId String @db.Uuid
+ reason ComplaintReason
+ description String
+ status CaseStatus @default(OPEN)
+ currentProposalId String? @db.Uuid
+ dataRevision Int @default(0)
+ version Int @default(0)
+ updatedAt DateTime @default(now()) @db.Timestamptz(3)
+ resolvedAt DateTime? @db.Timestamptz(3)
+ @@unique([merchantId,id])
+ @@unique([merchantId,id,orderId])
+}
+model Evidence {
+ promotionKeys String[] @default([])
+ declaredType String @default("application/octet-stream")
+ uploadState String @default("RESERVED")
+ expiresAt DateTime @default(now()) @db.Timestamptz(3)
+ actualSize BigInt?
+ actualHash String?
+ cleanObjectKey String?
+ scannerVersion String?
+ scannedAt DateTime? @db.Timestamptz(3)
+ failureCode String?
+ leaseOwner String? @db.Uuid
+ leaseUntil DateTime? @db.Timestamptz(3)
+ nextAttemptAt DateTime? @default(now()) @db.Timestamptz(3)
+ attempts Int @default(0)
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ caseId String @db.Uuid
+ uploaderUserId String @db.Uuid
+ objectKey String
+ objectVersion String?
+ filename String
+ detectedType String?
+ sizeBytes BigInt
+ sha256 String
+ scanStatus EvidenceState @default(QUARANTINED)
+ extractionStatus ExtractionState @default(PENDING)
+ @@unique([merchantId,id])
+ @@unique([objectKey])
+}
+model EvidenceChunk {
+ extractionId String? @db.Uuid
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ evidenceId String @db.Uuid
+ ordinal Int
+ page Int?
+ charStart Int
+ charEnd Int
+ textHash String
+ sanitizedText String
+ @@unique([merchantId,id])
+ @@unique([merchantId,evidenceId,ordinal])
+}
+model Analysis {
+ outputHash String?
+ contextId String? @db.Uuid
+ consentId String? @db.Uuid
+ requestedBy String? @db.Uuid
+ leaseOwner String? @db.Uuid
+ leaseUntil DateTime? @db.Timestamptz(3)
+ nextAttemptAt DateTime? @default(now()) @db.Timestamptz(3)
+ postAttempts Int @default(0)
+ version Int @default(0)
+ lastErrorCode String?
+ outputEncrypted String?
+ returnedModel String?
+ providerRequestId String?
+ completedAt DateTime? @db.Timestamptz(3)
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ caseId String @db.Uuid
+ snapshotHash String
+ snapshotJson Json
+ modelId String
+ promptVersion String
+ schemaVersion String
+ policyEngineVersion String
+ status AnalysisState @default(QUEUED)
+ reviewReasons Json
+ latencyMs Int?
+ tokenUsage Json?
+ @@unique([merchantId,id])
+}
+model Finding {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ analysisId String @db.Uuid
+ kind String
+ statement String
+ certaintyBand String
+ reviewStatus String
+ @@unique([merchantId,id])
+}
+model FindingReference {
+ analysisSourceId String? @db.Uuid
+ analysisId String? @db.Uuid
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ findingId String @db.Uuid
+ evidenceChunkId String? @db.Uuid
+ orderId String? @db.Uuid
+ captureId String? @db.Uuid
+ policyClauseId String? @db.Uuid
+ recordField String?
+ start Int?
+ end Int?
+ quoteHash String?
+ @@unique([merchantId,id])
+}
+model Proposal {
+ createdBy String? @db.Uuid
+ authorRole String?
+ contextHash String?
+ policyChecks Json?
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ caseId String @db.Uuid
+ orderId String @db.Uuid
+ analysisId String? @db.Uuid
+ policyVersionId String @db.Uuid
+ sequence Int
+ supersedesId String? @db.Uuid
+ kind ProposalKind
+ amountMinor BigInt?
+ currency String?
+ termsJson Json
+ contentHash String
+ expiresAt DateTime @db.Timestamptz(3)
+ status ProposalState @default(DRAFT)
+ rowVersion Int @default(0)
+ completedAt DateTime? @db.Timestamptz(3)
+ @@unique([merchantId,id])
+ @@unique([merchantId,caseId,sequence])
+ @@unique([merchantId,id,caseId])
+ @@unique([merchantId,id,orderId])
+}
+model Approval {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ proposalId String @db.Uuid
+ actorUserId String @db.Uuid
+ actorRole ActorRole
+ decision Decision
+ contentHash String
+ policyVersionId String @db.Uuid
+ decidedAt DateTime @db.Timestamptz(3)
+ authenticationContext Json
+ @@unique([merchantId,id])
+}
+model RefundOperation {
+ requestPayload Json?
+ firstDispatchAt DateTime? @db.Timestamptz(3)
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ captureId String @db.Uuid
+ proposalId String @db.Uuid
+ orderId String @db.Uuid
+ accountId String @db.Uuid
+ amountMinor BigInt
+ currency String
+ providerRequestId String @db.Uuid
+ requestHash String
+ providerRefundId String?
+ state OperationState @default(READY)
+ attemptCount Int @default(0)
+ leaseOwner String?
+ leaseUntil DateTime? @db.Timestamptz(3)
+ nextAttemptAt DateTime? @db.Timestamptz(3)
+ lastErrorCode String?
+ version Int @default(0)
+ completedAt DateTime? @db.Timestamptz(3)
+ updatedAt DateTime @default(now()) @db.Timestamptz(3)
+ @@unique([merchantId,id])
+ @@unique([merchantId,proposalId])
+ @@unique([accountId,providerRequestId])
+ @@unique([accountId,providerRefundId])
+}
+model PaymentAttempt {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ refundOperationId String? @db.Uuid
+ checkoutOperationId String? @db.Uuid
+ attemptNo Int
+ requestHash String
+ startedAt DateTime @db.Timestamptz(3)
+ finishedAt DateTime? @db.Timestamptz(3)
+ transportOutcome String?
+ providerDebugId String?
+ @@unique([merchantId,id])
+}
+model ExternalRefund {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ captureId String @db.Uuid
+ accountId String @db.Uuid
+ providerRefundId String
+ amountMinor BigInt
+ currency String
+ state OperationState
+ completedAt DateTime? @db.Timestamptz(3)
+ @@unique([merchantId,id])
+ @@unique([accountId,providerRefundId])
+}
+model FormalDispute {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ caseId String? @db.Uuid
+ accountId String @db.Uuid
+ providerDisputeId String
+ state String
+ lastSyncedAt DateTime? @db.Timestamptz(3)
+ @@unique([merchantId,id])
+ @@unique([accountId,providerDisputeId])
+}
+model WebhookInbox {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ accountId String @db.Uuid
+ providerEventId String
+ verificationStatus VerificationState @default(UNVERIFIED)
+ processingStatus ProcessingState @default(PENDING)
+ attempts Int @default(0)
+ receivedAt DateTime @default(now()) @db.Timestamptz(3)
+ @@unique([merchantId,id])
+ @@unique([accountId,providerEventId])
+}
+model WebhookReceipt {
+ receiptHash String?
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ inboxId String @db.Uuid
+ originalPayloadEncryptedRef String
+ payloadHash String
+ redactedHeaders Json
+ verificationStatus VerificationState @default(UNVERIFIED)
+ receivedAt DateTime @default(now()) @db.Timestamptz(3)
+ @@unique([merchantId,id])
+}
+model AuditEvent {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ aggregateType String
+ aggregateId String @db.Uuid
+ actorType String
+ actorId String? @db.Uuid
+ action String
+ visibility String
+ correlationId String
+ redactedMetadata Json
+ occurredAt DateTime @default(now()) @db.Timestamptz(3)
+ @@unique([merchantId,id])
+}
+model OutboxEvent {
+ leaseOwner String? @db.Uuid
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ aggregateType String
+ aggregateId String @db.Uuid
+ eventType String
+ schemaVersion Int
+ payloadIds Json
+ dedupeKey String
+ availableAt DateTime @default(now()) @db.Timestamptz(3)
+ leaseUntil DateTime? @db.Timestamptz(3)
+ deliveredAt DateTime? @db.Timestamptz(3)
+ attempts Int @default(0)
+ @@unique([merchantId,id])
+ @@unique([merchantId,dedupeKey])
+}
+model IdempotencyRecord {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ actorId String @db.Uuid
+ routeScope String
+ key String
+ requestHash String
+ operationId String? @db.Uuid
+ resultRef Json?
+ expiresAt DateTime @db.Timestamptz(3)
+ @@unique([merchantId,id])
+ @@unique([merchantId,actorId,routeScope,key])
+}
+
+model CaseComment {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ caseId String @db.Uuid
+ authorId String @db.Uuid
+ visibility String
+ body String
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+}
+model CaseTimelineEvent {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ caseId String @db.Uuid
+ actorId String? @db.Uuid
+ action String
+ previousStatus String?
+ newStatus String?
+ visibility String
+ metadata Json @default("{}")
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+}
+model PolicyDraft {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ document Json
+ version Int @default(0)
+ publishedVersionId String? @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+}
+model EvidenceWorkerTenant {
+ merchantId String @db.Uuid
+ roleName String
+ @@id([merchantId,roleName])
+}
+
+model AISharingPolicy {
+ executionMode String @default("external")
+ providerId String @default("openai")
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ sequence Int
+ modelId String
+ enabled Boolean
+ dailyBudgetMicros BigInt
+ policyHash String
+ disclosure String
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+}
+
+model AIContext {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ caseId String @db.Uuid
+ requestedBy String @db.Uuid
+ sharingPolicyId String @db.Uuid
+ selectedEvidenceIds String[] @db.Uuid
+ manifest Json
+ baseEncrypted String
+ requestEncrypted String?
+ catalogEncrypted String?
+ consentHash String?
+ state String @default("QUEUED")
+ errorCode String?
+ leaseOwner String? @db.Uuid
+ leaseUntil DateTime? @db.Timestamptz(3)
+ nextAttemptAt DateTime? @default(now()) @db.Timestamptz(3)
+ attempts Int @default(0)
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ expiresAt DateTime @default(dbgenerated("now() + interval '30 days'")) @db.Timestamptz(3)
+}
+
+model AIConsent {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ caseId String @db.Uuid
+ contextId String @db.Uuid
+ sharingPolicyId String @db.Uuid
+ consentHash String
+ actorId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+}
+
+model AIRevocation {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ consentId String @db.Uuid
+ actorId String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+}
+
+model EvidenceExtraction {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ caseId String @db.Uuid
+ evidenceId String @db.Uuid
+ sourceHash String
+ extractorVersion String
+ status String
+ metadataJson Json
+ textEncrypted String
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+}
+
+model AnalysisSource {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ analysisId String @db.Uuid
+ caseId String @db.Uuid
+ sourceKey String
+ kind String
+ caseSourceId String? @db.Uuid
+ orderId String? @db.Uuid
+ captureId String? @db.Uuid
+ commentId String? @db.Uuid
+ timelineId String? @db.Uuid
+ policyClauseId String? @db.Uuid
+ extractionId String? @db.Uuid
+ recordField String?
+ contentHash String
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+}
+
+model AIRecommendation {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ analysisId String @db.Uuid
+ caseId String @db.Uuid
+ candidate Json
+ constraints Json
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+}
+
+model AIReview {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ analysisId String @db.Uuid
+ caseId String @db.Uuid
+ sequence Int
+ actorId String @db.Uuid
+ action String
+ reason String
+ recommendation Json
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+}
+
+model AIUsage {
+ preflightAuthorizedAt DateTime? @db.Timestamptz(3)
+ dispatchAuthorizedAt DateTime? @db.Timestamptz(3)
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ analysisId String @db.Uuid
+ attempt Int
+ reservedMicros BigInt
+ chargedMicros BigInt?
+ status String @default("RESERVED")
+ usageJson Json?
+ requestId String?
+ priceVersion String
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+}
+
+model AIBudget {
+ merchantId String @db.Uuid
+ day DateTime @db.Date
+ committedMicros BigInt @default(0)
+ @@id([merchantId,day])
+}
+
+model AIWorkerTenant {
+ merchantId String @db.Uuid
+ roleName String
+ @@id([merchantId,roleName])
+}
+
+model ProposalPublication {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ caseId String @db.Uuid
+ proposalId String @db.Uuid
+ publishedBy String @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ @@unique([merchantId,proposalId])
+}
+
+model Settlement {
+ id String @id @default(uuid()) @db.Uuid
+ merchantId String @db.Uuid
+ caseId String @db.Uuid
+ proposalId String @db.Uuid
+ contentHash String
+ contextHash String
+ acceptedBy String @db.Uuid
+ acceptedProposalVersion Int
+ acceptedAt DateTime @default(now()) @db.Timestamptz(3)
+ authorizedBy String? @db.Uuid
+ authorizedAt DateTime? @db.Timestamptz(3)
+ refundOperationId String? @db.Uuid
+ state String @default("ACCEPTED")
+ version Int @default(0)
+ @@unique([merchantId,id])
+ @@unique([merchantId,proposalId])
+}
+
+model DemoTenant {
+ merchantId String @id @db.Uuid
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+}

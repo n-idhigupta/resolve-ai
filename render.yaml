@@ -1,0 +1,61 @@
+services:
+  - type: web
+    name: resolveai-api
+    runtime: node
+    plan: free
+    autoDeployTrigger: off
+    buildCommand: npm install --global pnpm@12.3.4 && pnpm install --frozen-lockfile --prod=false && pnpm build
+    startCommand: node apps/api/dist/main.js
+    healthCheckPath: /ready
+    envVars:
+      - key: NODE_VERSION
+        value: 24.13.1
+      - key: NODE_ENV
+        value: production
+      - key: API_HOST
+        value: 0.0.0.0
+      - key: API_PORT
+        value: 3001
+      - key: PAYPAL_ENABLED
+        value: 'false'
+      - key: PAYPAL_REFUNDS_ENABLED
+        value: 'false'
+      - key: AI_ENABLED
+        value: 'false'
+      - key: ENABLE_DEV_SEED
+        value: 'false'
+      - key: WEB_ORIGIN
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SESSION_HASH_PEPPER
+        sync: false
+      - key: CSRF_SECRET
+        sync: false
+      - key: AI_ARTIFACT_KEY
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_REGION
+        value: us-east-1
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_QUARANTINE_BUCKET
+        sync: false
+      - key: S3_CLEAN_BUCKET
+        sync: false
+  - type: web
+    name: resolveai-web
+    runtime: docker
+    plan: free
+    autoDeployTrigger: off
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: API_UPSTREAM
+        sync: false

@@ -1,0 +1,23 @@
+{
+  "name": "@resolveai/case-store",
+  "private": true,
+  "type": "module",
+  "exports": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@resolveai/shared": "workspace:*",
+    "@resolveai/policy-engine": "workspace:*",
+    "@resolveai/payment-store": "workspace:*",
+    "pg": "8.23.1",
+    "zod": "4.6.7",
+    "sharp": "0.35.5",
+    "pdf-lib": "1.17.1"
+  },
+  "devDependencies": {
+    "@types/pg": "8.15.5"
+  }
+}

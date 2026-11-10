@@ -1,0 +1,46 @@
+services:
+  api:
+    build: { context: .., target: api }
+    environment:
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      WEB_ORIGIN: ${WEB_ORIGIN:?HTTPS origin required}
+      DATABASE_URL: ${DATABASE_URL:?restricted runtime role required}
+      REDIS_URL: ${REDIS_URL:?private Redis required}
+      SESSION_HASH_PEPPER: ${SESSION_HASH_PEPPER:?secret required}
+      CSRF_SECRET: ${CSRF_SECRET:?secret required}
+      PAYPAL_ENABLED: 'false'
+      PAYPAL_REFUNDS_ENABLED: 'false'
+      AI_ENABLED: 'false'
+      ENABLE_DEV_SEED: 'false'
+      AI_ARTIFACT_KEY: ${AI_ARTIFACT_KEY:?artifact encryption key required}
+      S3_ENDPOINT: ${S3_ENDPOINT:?private storage endpoint required}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?storage access key required}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?storage secret required}
+      S3_QUARANTINE_BUCKET: ${S3_QUARANTINE_BUCKET:?private bucket required}
+      S3_CLEAN_BUCKET: ${S3_CLEAN_BUCKET:?private bucket required}
+    expose: ['3001']
+    restart: unless-stopped
+    security_opt: ['no-new-privileges:true']
+  web:
+    build: { context: .., target: web }
+    ports: ['127.0.0.1:8080:8080']
+    depends_on: { api: { condition: service_healthy } }
+    restart: unless-stopped
+    security_opt: ['no-new-privileges:true']
+  migration:
+    profiles: ['migration']
+    build: { context: .., target: api }
+    environment:
+      NODE_ENV: production
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:-}
+    command:
+      [
+        'node',
+        'apps/api/node_modules/prisma/build/index.js',
+        'migrate',
+        'deploy',
+        '--config',
+        'apps/api/prisma.config.ts',
+      ]

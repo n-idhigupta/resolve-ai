@@ -1,0 +1,11 @@
+ALTER TABLE "Evidence" ADD CONSTRAINT scanned_before_clean CHECK("scanStatus"<>'CLEAN' OR ("scannedAt" IS NOT NULL AND "scannerVersion" IS NOT NULL AND "cleanObjectKey" IS NOT NULL AND "uploadState"='AVAILABLE'));
+CREATE INDEX case_history ON "Case"("merchantId","orderId","createdAt",id);
+CREATE INDEX comment_history ON "CaseComment"("merchantId","caseId","createdAt",id);
+CREATE INDEX timeline_history ON "CaseTimelineEvent"("merchantId","caseId","createdAt",id);
+CREATE INDEX evidence_due ON "Evidence"("merchantId","uploadState","nextAttemptAt");
+DROP POLICY evidence_worker ON "OutboxEvent";
+CREATE POLICY evidence_worker ON "OutboxEvent" TO resolve_evidence,resolve_evidence_test USING("eventType"='evidence.validate' AND "merchantId"=NULLIF(current_setting('app.merchant_id',true),'')::uuid AND EXISTS(SELECT 1 FROM "EvidenceWorkerTenant" a WHERE a."merchantId"="OutboxEvent"."merchantId" AND a."roleName"=current_user)) WITH CHECK("eventType"='evidence.validate' AND "merchantId"=NULLIF(current_setting('app.merchant_id',true),'')::uuid AND EXISTS(SELECT 1 FROM "EvidenceWorkerTenant" a WHERE a."merchantId"="OutboxEvent"."merchantId" AND a."roleName"=current_user));
+CREATE FUNCTION immutable_published_draft() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN IF OLD."publishedVersionId" IS NOT NULL THEN RAISE EXCEPTION 'Published draft immutable';END IF;RETURN NEW;END$$;
+CREATE TRIGGER published_draft_guard BEFORE UPDATE ON "PolicyDraft" FOR EACH ROW EXECUTE FUNCTION immutable_published_draft();
+CREATE FUNCTION immutable_case_identity() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN IF (NEW."merchantId",NEW."orderId",NEW."openedBy",NEW."policyVersionId",NEW."policySnapshot",NEW.reason,NEW.title,NEW.description,NEW."requestedOutcome",NEW."desiredResolution") IS DISTINCT FROM (OLD."merchantId",OLD."orderId",OLD."openedBy",OLD."policyVersionId",OLD."policySnapshot",OLD.reason,OLD.title,OLD.description,OLD."requestedOutcome",OLD."desiredResolution") THEN RAISE EXCEPTION 'Submitted complaint immutable';END IF;RETURN NEW;END$$;
+CREATE TRIGGER case_identity_guard BEFORE UPDATE ON "Case" FOR EACH ROW EXECUTE FUNCTION immutable_case_identity();

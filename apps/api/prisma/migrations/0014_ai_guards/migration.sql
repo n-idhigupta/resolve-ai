@@ -1,0 +1,20 @@
+DROP INDEX "EvidenceChunk_unique_1";
+CREATE UNIQUE INDEX extraction_chunk_ordinal ON "EvidenceChunk"("merchantId","evidenceId","extractionId",ordinal) WHERE "extractionId" IS NOT NULL;
+CREATE UNIQUE INDEX legacy_chunk_ordinal ON "EvidenceChunk"("merchantId","evidenceId",ordinal) WHERE "extractionId" IS NULL;
+CREATE UNIQUE INDEX evidence_same_case ON "Evidence"("merchantId",id,"caseId");
+ALTER TABLE "EvidenceExtraction" ADD CONSTRAINT extraction_same_case FOREIGN KEY("merchantId","evidenceId","caseId") REFERENCES "Evidence"("merchantId",id,"caseId");
+ALTER TABLE "AIUsage" ADD COLUMN "preflightAuthorizedAt" timestamptz,ADD COLUMN "dispatchAuthorizedAt" timestamptz;
+ALTER TABLE "Analysis" ADD COLUMN "outputHash" text;
+GRANT INSERT ON "AuditEvent" TO resolve_ai,resolve_ai_test;
+CREATE POLICY ai_audit ON "AuditEvent" FOR INSERT TO resolve_ai,resolve_ai_test WITH CHECK("merchantId"=NULLIF(current_setting('app.merchant_id',true),'')::uuid AND "aggregateType"='Analysis' AND "actorType"='AI_WORKER' AND EXISTS(SELECT 1 FROM "AIWorkerTenant" w WHERE w."merchantId"="AuditEvent"."merchantId" AND w."roleName"=current_user));
+CREATE OR REPLACE FUNCTION guard_ai_context() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN
+ IF OLD.state='READY' AND NOT(NEW.state='EXPIRED' AND OLD."expiresAt"<now() AND NEW."baseEncrypted"='' AND NEW."requestEncrypted" IS NULL AND NEW."catalogEncrypted" IS NULL) AND (NEW."requestEncrypted",NEW."catalogEncrypted",NEW."consentHash",NEW.manifest,NEW."baseEncrypted",NEW."sharingPolicyId",NEW."selectedEvidenceIds",NEW."caseId",NEW."merchantId") IS DISTINCT FROM (OLD."requestEncrypted",OLD."catalogEncrypted",OLD."consentHash",OLD.manifest,OLD."baseEncrypted",OLD."sharingPolicyId",OLD."selectedEvidenceIds",OLD."caseId",OLD."merchantId") THEN RAISE EXCEPTION 'Ready AI context immutable';END IF;RETURN NEW;END$$;
+CREATE OR REPLACE FUNCTION guard_ai_result() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN
+ IF OLD."contextId" IS NOT NULL AND (NEW."contextId",NEW."consentId",NEW."snapshotHash",NEW."snapshotJson",NEW."modelId",NEW."promptVersion",NEW."schemaVersion",NEW."policyEngineVersion",NEW."caseId",NEW."merchantId",NEW."requestedBy") IS DISTINCT FROM (OLD."contextId",OLD."consentId",OLD."snapshotHash",OLD."snapshotJson",OLD."modelId",OLD."promptVersion",OLD."schemaVersion",OLD."policyEngineVersion",OLD."caseId",OLD."merchantId",OLD."requestedBy") THEN RAISE EXCEPTION 'AI input immutable';END IF;
+ IF OLD."outputHash" IS NOT NULL AND NEW."outputHash" IS DISTINCT FROM OLD."outputHash" THEN RAISE EXCEPTION 'AI output hash immutable';END IF;
+ IF OLD."outputEncrypted" IS NOT NULL AND NEW."outputEncrypted" IS DISTINCT FROM OLD."outputEncrypted" AND NOT(NEW."outputEncrypted" IS NULL AND EXISTS(SELECT 1 FROM public."AIContext" c WHERE c.id=OLD."contextId" AND c."expiresAt"<now() AND c.state='EXPIRED')) THEN RAISE EXCEPTION 'AI output immutable';END IF;RETURN NEW;END$$;
+CREATE FUNCTION ai_purge_expired() RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$DECLARE m uuid:=NULLIF(current_setting('app.merchant_id',true),'')::uuid;n integer;BEGIN
+ IF NOT EXISTS(SELECT 1 FROM public."AIWorkerTenant" WHERE "merchantId"=m AND "roleName"=session_user) THEN RAISE EXCEPTION 'Unauthorized AI cleanup';END IF;
+ UPDATE public."AIContext" SET state='EXPIRED',"baseEncrypted"='',"requestEncrypted"=NULL,"catalogEncrypted"=NULL WHERE "merchantId"=m AND "expiresAt"<now() AND state<>'EXPIRED';GET DIAGNOSTICS n=ROW_COUNT;
+ UPDATE public."Analysis" SET "outputEncrypted"=NULL,status='STALE' WHERE "merchantId"=m AND "contextId" IN(SELECT id FROM public."AIContext" WHERE "merchantId"=m AND state='EXPIRED');RETURN n;END$$;
+REVOKE ALL ON FUNCTION ai_purge_expired() FROM PUBLIC;GRANT EXECUTE ON FUNCTION ai_purge_expired() TO resolve_ai,resolve_ai_test;

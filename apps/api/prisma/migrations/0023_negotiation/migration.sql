@@ -1,0 +1,31 @@
+ALTER TYPE "ProposalState" ADD VALUE IF NOT EXISTS 'WITHDRAWN';
+ALTER TABLE "Proposal" ADD COLUMN "createdBy" uuid REFERENCES "User"(id),ADD COLUMN "authorRole" text CHECK("authorRole" IN ('CUSTOMER','MERCHANT')),ADD COLUMN "contextHash" text,ADD COLUMN "policyChecks" jsonb;
+ALTER TABLE "Proposal" ADD CONSTRAINT proposal_author_complete CHECK(num_nonnulls("createdBy","authorRole","contextHash","policyChecks") IN (0,4));
+CREATE TABLE "ProposalPublication"(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),"merchantId" uuid NOT NULL,"caseId" uuid NOT NULL,"proposalId" uuid NOT NULL,"publishedBy" uuid NOT NULL REFERENCES "User"(id),"createdAt" timestamptz NOT NULL DEFAULT now(),UNIQUE("merchantId","proposalId"),FOREIGN KEY("merchantId","proposalId","caseId") REFERENCES "Proposal"("merchantId",id,"caseId"));
+ALTER TABLE "ProposalPublication" ENABLE ROW LEVEL SECURITY;ALTER TABLE "ProposalPublication" FORCE ROW LEVEL SECURITY;
+CREATE POLICY migration_access ON "ProposalPublication" TO resolve_migrator USING(true) WITH CHECK(true);
+CREATE POLICY visible ON "ProposalPublication" FOR SELECT TO resolve_runtime,resolve_test USING("merchantId"=NULLIF(current_setting('app.merchant_id',true),'')::uuid AND case_visible("merchantId","caseId"));
+CREATE POLICY publish ON "ProposalPublication" FOR INSERT TO resolve_runtime,resolve_test WITH CHECK("merchantId"=NULLIF(current_setting('app.merchant_id',true),'')::uuid AND case_visible("merchantId","caseId") AND "publishedBy"=NULLIF(current_setting('app.user_id',true),'')::uuid AND EXISTS(SELECT 1 FROM "Membership" m WHERE m."merchantId"="ProposalPublication"."merchantId" AND m."userId"="ProposalPublication"."publishedBy" AND m.active AND m.role IN ('OWNER','APPROVER')));
+CREATE TRIGGER immutable BEFORE UPDATE OR DELETE ON "ProposalPublication" FOR EACH ROW EXECUTE FUNCTION reject_mutation();
+GRANT SELECT,INSERT ON "ProposalPublication" TO resolve_runtime,resolve_test;
+DROP POLICY tenant_read ON "Proposal";
+CREATE POLICY negotiation_read ON "Proposal" FOR SELECT TO resolve_runtime,resolve_test USING("merchantId"=NULLIF(current_setting('app.merchant_id',true),'')::uuid AND case_visible("merchantId","caseId") AND (case_member("merchantId") OR ("authorRole"='CUSTOMER' AND "createdBy"=NULLIF(current_setting('app.user_id',true),'')::uuid) OR EXISTS(SELECT 1 FROM "ProposalPublication" p WHERE p."proposalId"="Proposal".id AND p."merchantId"="Proposal"."merchantId")));
+CREATE POLICY negotiation_insert ON "Proposal" FOR INSERT TO resolve_runtime,resolve_test WITH CHECK("merchantId"=NULLIF(current_setting('app.merchant_id',true),'')::uuid AND case_visible("merchantId","caseId") AND "createdBy"=NULLIF(current_setting('app.user_id',true),'')::uuid AND status='DRAFT' AND "contextHash" IS NOT NULL AND ((case_member("merchantId") AND "authorRole"='MERCHANT') OR (NOT case_member("merchantId") AND "authorRole"='CUSTOMER' AND "supersedesId" IS NOT NULL)));
+CREATE POLICY negotiation_update ON "Proposal" FOR UPDATE TO resolve_runtime,resolve_test USING("merchantId"=NULLIF(current_setting('app.merchant_id',true),'')::uuid AND case_visible("merchantId","caseId")) WITH CHECK("merchantId"=NULLIF(current_setting('app.merchant_id',true),'')::uuid AND case_visible("merchantId","caseId"));
+GRANT INSERT,UPDATE(status,"rowVersion") ON "Proposal" TO resolve_runtime,resolve_test;
+CREATE FUNCTION negotiation_transition_guard() RETURNS trigger LANGUAGE plpgsql AS $$DECLARE r text;u uuid:=NULLIF(current_setting('app.user_id',true),'')::uuid;BEGIN
+ IF current_user='resolve_migrator' THEN RETURN NEW;END IF;
+ SELECT role::text INTO r FROM "Membership" WHERE "merchantId"=OLD."merchantId" AND "userId"=u AND active;
+ IF NEW.status IS NOT DISTINCT FROM OLD.status THEN RETURN NEW;END IF;
+ IF OLD.status NOT IN ('DRAFT','OFFERED') OR NEW."rowVersion"<>OLD."rowVersion"+1 THEN RAISE EXCEPTION 'Invalid negotiation transition';END IF;
+ IF NEW.status='OFFERED' AND NOT(OLD.status='DRAFT' AND OLD."authorRole"='MERCHANT' AND coalesce(r IN ('OWNER','APPROVER'),false) AND OLD."expiresAt">now()) THEN RAISE EXCEPTION 'Publication requires approver';END IF;
+ IF NEW.status::text NOT IN ('OFFERED','REJECTED','WITHDRAWN','EXPIRED','SUPERSEDED') THEN RAISE EXCEPTION 'Settlement disabled in milestone A';END IF;
+ IF NEW.status='EXPIRED' AND OLD."expiresAt">now() THEN RAISE EXCEPTION 'Offer not expired';END IF;
+ IF NEW.status='WITHDRAWN' AND NOT((r IS NOT NULL AND OLD."authorRole"='MERCHANT') OR (r IS NULL AND OLD."createdBy"=u)) THEN RAISE EXCEPTION 'Not offer author';END IF;
+ IF NEW.status='REJECTED' AND ((r IS NOT NULL AND OLD."authorRole"<>'CUSTOMER') OR (r IS NULL AND OLD.status<>'OFFERED')) THEN RAISE EXCEPTION 'Invalid rejection';END IF;
+ RETURN NEW;END$$;
+CREATE TRIGGER negotiation_transition BEFORE UPDATE ON "Proposal" FOR EACH ROW EXECUTE FUNCTION negotiation_transition_guard();
+CREATE FUNCTION negotiation_next_sequence(p_case uuid) RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$DECLARE m uuid:=NULLIF(current_setting('app.merchant_id',true),'')::uuid;u uuid:=NULLIF(current_setting('app.user_id',true),'')::uuid;n integer;BEGIN
+ IF NOT EXISTS(SELECT 1 FROM public."Case" c WHERE c.id=p_case AND c."merchantId"=m AND (c."openedBy"=u OR EXISTS(SELECT 1 FROM public."Membership" x WHERE x."merchantId"=m AND x."userId"=u AND x.active))) THEN RAISE EXCEPTION 'Case inaccessible';END IF;
+ SELECT COALESCE(max(sequence),0)+1 INTO n FROM public."Proposal" WHERE "caseId"=p_case AND "merchantId"=m;RETURN n;END$$;
+REVOKE ALL ON FUNCTION negotiation_next_sequence(uuid) FROM PUBLIC;GRANT EXECUTE ON FUNCTION negotiation_next_sequence(uuid) TO resolve_runtime,resolve_test;

@@ -1,0 +1,36 @@
+{
+  "name": "@resolveai/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --exclude ./src/generated/** src/main.ts",
+    "build": "prisma generate && tsc -p tsconfig.json",
+    "typecheck": "prisma generate && tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@resolveai/shared": "workspace:*",
+    "@resolveai/policy-engine": "workspace:*",
+    "@fastify/cookie": "11.1.5",
+    "@fastify/cors": "11.4.1",
+    "@fastify/rate-limit": "11.2.2",
+    "fastify": "5.12.8",
+    "zod": "4.6.7",
+    "@prisma/client": "7.10.1",
+    "@prisma/adapter-pg": "7.10.1",
+    "pg": "8.23.1",
+    "ioredis": "6.0.0",
+    "argon2": "0.45.2",
+    "dotenv": "17.2.3",
+    "@resolveai/payment-store": "workspace:*",
+    "@resolveai/paypal-client": "workspace:*",
+    "@resolveai/case-store": "workspace:*",
+    "@resolveai/ai-core": "workspace:*"
+  },
+  "devDependencies": {
+    "prisma": "7.10.1",
+    "@types/pg": "8.15.5"
+  }
+}

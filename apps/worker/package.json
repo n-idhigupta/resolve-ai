@@ -1,0 +1,23 @@
+{
+  "name": "@resolveai/worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node ../../scripts/worker-launch.mjs",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "queue:smoke": "tsx src/smoke.ts"
+  },
+  "dependencies": {
+    "@resolveai/shared": "workspace:*",
+    "bullmq": "6.7.2",
+    "ioredis": "6.0.0",
+    "pino": "10.4.0",
+    "zod": "4.6.7",
+    "dotenv": "17.2.3",
+    "@resolveai/payment-store": "workspace:*",
+    "@resolveai/paypal-client": "workspace:*",
+    "@resolveai/case-store": "workspace:*",
+    "@resolveai/ai-core": "workspace:*"
+  }
+}

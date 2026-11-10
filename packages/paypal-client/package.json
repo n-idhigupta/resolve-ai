@@ -1,0 +1,19 @@
+{
+  "name": "@resolveai/paypal-client",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "type": "module",
+  "dependencies": {
+    "@resolveai/shared": "workspace:*",
+    "zod": "4.6.7"
+  },
+  "private": true
+}
