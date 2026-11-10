@@ -4,10 +4,14 @@ test('accessible foundation routing and actual readiness', async ({
   request,
 }) => {
   expect((await request.get('http://localhost:3001/ready')).status()).toBe(200);
+  await page.route('**/api/v1/auth/session', (route) =>
+    route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }),
+  );
   await page.goto('/');
+  await expect(page).toHaveURL('/login');
   await expect(
     page.getByRole('heading', {
-      name: 'Resolve complaints. Build trust.',
+      name: 'Sign in to ResolveAI',
     }),
   ).toBeVisible();
   await expect(
@@ -15,7 +19,7 @@ test('accessible foundation routing and actual readiness', async ({
       'Demo & Sandbox - Human-approved resolutions - Real refunds disabled',
     ),
   ).toBeVisible();
-  await page.getByRole('link', { name: 'View system status' }).click();
+  await page.getByRole('link', { name: 'System status' }).click();
   await expect(page).toHaveURL('/status');
   await expect(page.getByRole('status')).toHaveText(
     'API, database and Redis are ready.',

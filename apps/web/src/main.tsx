@@ -1,3 +1,4 @@
+import { RootRedirect } from './root-redirect';
 import { ComplaintsApp } from './complaints';
 import { Checkout } from './checkout';
 import { StrictMode, useEffect, useState } from 'react';
@@ -87,59 +88,7 @@ function App() {
           ].map((path) => (
             <Route key={path} path={path} element={<ComplaintsApp />} />
           ))}
-          <Route
-            path="/"
-            element={
-              <Card>
-                <p className="mb-3 text-sm font-medium text-teal-700">
-                  Evidence. Agreement. Accountability.
-                </p>
-                <h1 className="text-3xl font-semibold">
-                  Resolve complaints. Build trust.
-                </h1>
-                <p className="my-5 max-w-xl text-slate-600">
-                  Sandbox checkout and verified payment tracking are available
-                  when configured. Consent-based AI analysis and human-reviewed
-                  negotiation are available. Synthetic settlement demos use
-                  mocked refunds; real refund execution remains disabled.
-                </p>
-                <Button asChild>
-                  <Link to="/complaints">Open your workspace</Link>
-                </Button>
-                <Link
-                  className="ml-4 text-sm font-medium text-teal-800 underline"
-                  to="/status"
-                >
-                  View system status
-                </Link>
-                <div className="mt-8 grid gap-4 border-t pt-6 sm:grid-cols-3">
-                  {[
-                    [
-                      '01',
-                      'Understand the facts',
-                      'Inspect case records, clean evidence and cited recommendations.',
-                    ],
-                    [
-                      '02',
-                      'Agree transparently',
-                      'Review immutable offers, policy limits and exact consent.',
-                    ],
-                    [
-                      '03',
-                      'Track the outcome',
-                      'Follow authorized settlement and tenant-isolated analytics.',
-                    ],
-                  ].map(([n, title, text]) => (
-                    <div key={n}>
-                      <p className="text-xs font-semibold text-teal-700">{n}</p>
-                      <h2 className="my-2 font-semibold">{title}</h2>
-                      <p className="text-sm text-slate-600">{text}</p>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            }
-          />
+          <Route path="/" element={<RootRedirect />} />
           <Route path="/status" element={<Status />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route
