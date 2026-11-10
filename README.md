@@ -151,3 +151,5 @@ Run pnpm demo:hackathon to append an isolated synthetic tenant, then pnpm demo:s
 See [integration readiness](docs/INTEGRATION-READINESS.md) for the two Gemini503 outcomes, completed USD1 Sandbox refund, isolated regression results and validated deployment configuration. Real Gemini output remains unverified; no deployment or billing activation is implied.
 
 Sponsor technology: the merchant inbox uses AG Grid Community with React status/review renderers. See [hackathon submission copy](docs/HACKATHON-SUBMISSION.md).
+
+Strict INR0/no-card deployment: use the separate [restricted Free demo](docs/FREE-DEMO.md) and render.free-demo.yaml; provider execution and evidence access are disabled. This is not the full worker-powered demo.

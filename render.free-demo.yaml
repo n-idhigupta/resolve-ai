@@ -1,0 +1,52 @@
+# Separate restricted public demo; manually provision approved Free PostgreSQL and Key Value first.
+services:
+  - type: web
+    name: resolveai-demo-api
+    runtime: node
+    plan: free
+    autoDeployTrigger: off
+    buildCommand: npm install --global pnpm@12.3.4 && pnpm install --frozen-lockfile --prod=false && pnpm build
+    startCommand: node apps/api/dist/free-demo-main.js
+    healthCheckPath: /ready
+    envVars:
+      - key: NODE_VERSION
+        value: 24.13.1
+      - key: NODE_ENV
+        value: production
+      - key: API_HOST
+        value: 0.0.0.0
+      - key: API_PORT
+        value: 3001
+      - key: PAYPAL_ENABLED
+        value: 'false'
+      - key: PAYPAL_REFUNDS_ENABLED
+        value: 'false'
+      - key: AI_ENABLED
+        value: 'false'
+      - key: ENABLE_DEV_SEED
+        value: 'false'
+      - key: EVIDENCE_ENABLED
+        value: 'false'
+      - key: RESOLVEAI_FREE_DEMO
+        value: 'true'
+      - key: WEB_ORIGIN
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SESSION_HASH_PEPPER
+        generateValue: true
+      - key: CSRF_SECRET
+        generateValue: true
+  - type: web
+    name: resolveai-demo-web
+    runtime: docker
+    plan: free
+    autoDeployTrigger: off
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: API_UPSTREAM
+        sync: false

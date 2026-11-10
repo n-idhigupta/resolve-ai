@@ -42,9 +42,19 @@ export async function registerCases(
   db: Database,
   store: CaseStore,
   env: Env,
+  options: { evidenceEnabled?: boolean } = {},
 ) {
-  const storage = new PrivateStorage(storageEnvSchema.parse(process.env)),
-    evidence = new EvidenceService(store, storage);
+  const evidence =
+    options.evidenceEnabled === false
+      ? undefined
+      : new EvidenceService(
+          store,
+          new PrivateStorage(storageEnvSchema.parse(process.env)),
+        );
+  const requireEvidence = () => {
+    if (!evidence) fail('EVIDENCE_DISABLED', 503);
+    return evidence!;
+  };
   async function actors(request: FastifyRequest) {
     const auth = await requireSession(request, db, env);
     if (!['GET', 'HEAD'].includes(request.method))
@@ -460,6 +470,7 @@ export async function registerCases(
   app.post('/api/v1/cases/:caseId/evidence/uploads', async (r, reply) => {
     const caseId = id((r.params as Record<string, string>).caseId),
       a = await scope(r, 'case', caseId);
+    requireEvidence();
     return reply.code(201).send(
       send(r, {
         ...(await store.evidence(a, caseId, r.body, version(r), key(r))),
@@ -484,7 +495,12 @@ export async function registerCases(
         if (!Buffer.isBuffer(r.body)) fail('BINARY_BODY_REQUIRED', 422);
         return send(
           r,
-          await evidence.upload(a, caseId, id(p.evidenceId), r.body as Buffer),
+          await requireEvidence().upload(
+            a,
+            caseId,
+            id(p.evidenceId),
+            r.body as Buffer,
+          ),
         );
       },
     );
@@ -499,7 +515,7 @@ export async function registerCases(
       reply.code(202);
       return send(
         r,
-        await evidence.complete(
+        await requireEvidence().complete(
           a,
           caseId,
           id(p.evidenceId),
@@ -515,7 +531,7 @@ export async function registerCases(
       const p = r.params as Record<string, string>,
         caseId = id(p.caseId),
         a = await scope(r, 'case', caseId),
-        file = await evidence.download(a, caseId, id(p.evidenceId));
+        file = await requireEvidence().download(a, caseId, id(p.evidenceId));
       return reply
         .type(file.mime)
         .header('Content-Disposition', 'attachment; filename="evidence"')
