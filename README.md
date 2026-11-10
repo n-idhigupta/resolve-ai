@@ -19,13 +19,15 @@ https://github.com/n-idhigupta/resolve-ai
 ## Tech Stack
 
 | Layer | Technology |
-|---|---|
-| Frontend | React, TypeScript, Vite |
-| Backend | Node.js, Fastify |
-| Database | PostgreSQL, Prisma |
-| Cache and Queue | Redis, BullMQ |
-| AI | Google Gemini |
-| Payments | PayPal Sandbox |
+| --- | --- |
+| Frontend | React, TypeScript, Vite, Tailwind; AG Grid Community. |
+| Backend | Node.js, Fastify, TypeScript, Zod. |
+| Persistence | PostgreSQL, Prisma, SQL migrations and FORCE RLS. |
+| Jobs / caching | Redis and BullMQ. |
+| Evidence | Private S3-compatible storage and ClamAV. |
+| AI | Provider adapters for OpenAI/Gemini; mocked demo inference. |
+| Payments | PayPal Sandbox APIs and webhooks. |
+| Tooling | pnpm monorepo, Turbo, Docker Compose, Vitest and Playwright. |
 
 ## Local Setup
 
